@@ -1,0 +1,1072 @@
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1" name="viewport" />
+  <title>Advanced AI Demo - Multi-Feature Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+  />
+  <style>
+    /* Scrollbar for chat */
+    #chat-messages {
+      scrollbar-width: thin;
+      scrollbar-color: #3b82f6 #e5e7eb;
+    }
+    #chat-messages::-webkit-scrollbar {
+      width: 8px;
+    }
+    #chat-messages::-webkit-scrollbar-track {
+      background: #e5e7eb;
+    }
+    #chat-messages::-webkit-scrollbar-thumb {
+      background-color: #3b82f6;
+      border-radius: 10px;
+      border: 2px solid #e5e7eb;
+    }
+    /* Chessboard styles */
+    .chessboard {
+      display: grid;
+      grid-template-columns: repeat(8, 40px);
+      grid-template-rows: repeat(8, 40px);
+      border: 2px solid #333;
+      width: 320px;
+      height: 320px;
+      user-select: none;
+      margin: 0 auto;
+    }
+    .square {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 28px;
+      cursor: pointer;
+    }
+    .square.light {
+      background-color: #f0d9b5;
+    }
+    .square.dark {
+      background-color: #b58863;
+    }
+    .square.highlight {
+      outline: 3px solid #3b82f6;
+      outline-offset: -3px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+  <header class="bg-blue-700 text-white p-4 flex items-center justify-center gap-3">
+    <i class="fas fa-robot text-3xl"></i>
+    <h1 class="text-3xl font-bold">Advanced AI Assistant</h1>
+  </header>
+
+  <main class="flex-grow flex flex-col md:flex-row max-w-7xl mx-auto p-4 gap-6">
+    <!-- Left: Chat Assistant -->
+    <section
+      aria-label="Chat Assistant"
+      class="flex flex-col flex-grow bg-white rounded-lg shadow p-4 max-h-[80vh]"
+    >
+      <h2 class="text-xl font-semibold mb-3 flex items-center gap-2 text-blue-700">
+        <i class="fas fa-comments"></i> Chat with AI
+      </h2>
+      <div
+        id="chat-messages"
+        class="flex-grow overflow-y-auto border border-gray-300 rounded p-3 space-y-4 bg-gray-50"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      ></div>
+      <form id="chat-form" class="mt-3 flex gap-2" aria-label="Chat input form">
+        <input
+          id="chat-input"
+          type="text"
+          autocomplete="off"
+          placeholder="Tanya apa saja, misal: 'Perkenalan', 'Teka-teki', 'Catur', atau 'Cuaca di Jakarta'"
+          class="flex-grow border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Input pesan chat"
+          required
+        />
+        <button
+          type="submit"
+          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition flex items-center gap-2"
+          aria-label="Kirim pesan"
+        >
+          <i class="fas fa-paper-plane"></i> Kirim
+        </button>
+      </form>
+    </section>
+
+    <!-- Right: Dynamic Content Area -->
+    <section
+      id="dynamic-content"
+      class="flex flex-col w-full md:w-96 bg-white rounded-lg shadow p-4 overflow-auto max-h-[80vh]"
+      aria-live="polite"
+    >
+      <h2 class="text-xl font-semibold mb-3 flex items-center gap-2 text-green-700">
+        <i class="fas fa-info-circle"></i> Output
+      </h2>
+      <div id="content-area" class="flex-grow overflow-y-auto"></div>
+    </section>
+  </main>
+
+  <footer class="bg-gray-100 text-center text-gray-600 p-3 text-sm">
+    © 2024 FADHLAN's Advanced AI Demo
+  </footer>
+
+  <script>
+    // Utilities
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Chat elements
+    const chatMessages = document.getElementById("chat-messages");
+    const chatForm = document.getElementById("chat-form");
+    const chatInput = document.getElementById("chat-input");
+    const contentArea = document.getElementById("content-area");
+    const dynamicContent = document.getElementById("dynamic-content");
+
+    // Chess variables
+    const piecesUnicode = {
+      P: "♙",
+      R: "♖",
+      N: "♘",
+      B: "♗",
+      Q: "♕",
+      K: "♔",
+      p: "♟",
+      r: "♜",
+      n: "♞",
+      b: "♝",
+      q: "♛",
+      k: "♚",
+    };
+    let chessBoard = [];
+    let chessTurn = "w";
+    let chessSelected = null;
+    let chessLegalMoves = [];
+    let chessMoveHistory = [];
+
+    // Initialize chess board
+    function initChessBoard() {
+      chessBoard = [
+        ["r", "n", "b", "q", "k", "b", "n", "r"],
+        ["p", "p", "p", "p", "p", "p", "p", "p"],
+        ["", "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", ""],
+        ["P", "P", "P", "P", "P", "P", "P", "P"],
+        ["R", "N", "B", "Q", "K", "B", "N", "R"],
+      ];
+      chessTurn = "w";
+      chessSelected = null;
+      chessLegalMoves = [];
+      chessMoveHistory = [];
+    }
+
+    // Chess helper functions
+    function isInsideBoard(r, c) {
+      return r >= 0 && r < 8 && c >= 0 && c < 8;
+    }
+    function isWhite(piece) {
+      return piece && piece === piece.toUpperCase();
+    }
+    function isBlack(piece) {
+      return piece && piece === piece.toLowerCase();
+    }
+    function generateLegalMoves(r, c) {
+      const piece = chessBoard[r][c];
+      if (!piece) return [];
+      const moves = [];
+      const directions = {
+        N: [
+          [-2, -1],
+          [-2, 1],
+          [-1, -2],
+          [-1, 2],
+          [1, -2],
+          [1, 2],
+          [2, -1],
+          [2, 1],
+        ],
+        B: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+        ],
+        R: [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+        Q: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+        K: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+      };
+      const whiteTurn = isWhite(piece);
+      switch (piece.toUpperCase()) {
+        case "P": {
+          const dir = whiteTurn ? -1 : 1;
+          if (
+            isInsideBoard(r + dir, c) &&
+            chessBoard[r + dir][c] === ""
+          ) {
+            moves.push([r + dir, c]);
+            if (
+              (whiteTurn && r === 6) ||
+              (!whiteTurn && r === 1)
+            ) {
+              if (chessBoard[r + 2 * dir][c] === "") {
+                moves.push([r + 2 * dir, c]);
+              }
+            }
+          }
+          for (const dc of [-1, 1]) {
+            const nr = r + dir;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (
+                target &&
+                ((whiteTurn && isBlack(target)) ||
+                  (!whiteTurn && isWhite(target)))
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+        case "N": {
+          for (const [dr, dc] of directions.N) {
+            const nr = r + dr;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (
+                !target ||
+                (whiteTurn && isBlack(target)) ||
+                (!whiteTurn && isWhite(target))
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+        case "B": {
+          for (const [dr, dc] of directions.B) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && isBlack(target)) ||
+                  (!whiteTurn && isWhite(target))
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "R": {
+          for (const [dr, dc] of directions.R) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && isBlack(target)) ||
+                  (!whiteTurn && isWhite(target))
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "Q": {
+          for (const [dr, dc] of directions.Q) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && isBlack(target)) ||
+                  (!whiteTurn && isWhite(target))
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "K": {
+          for (const [dr, dc] of directions.K) {
+            const nr = r + dr;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = chessBoard[nr][nc];
+              if (
+                !target ||
+                (whiteTurn && isBlack(target)) ||
+                (!whiteTurn && isWhite(target))
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+      }
+      return moves;
+    }
+    function makeChessMove(r1, c1, r2, c2) {
+      const piece = chessBoard[r1][c1];
+      const captured = chessBoard[r2][c2];
+      chessBoard[r2][c2] = piece;
+      chessBoard[r1][c1] = "";
+      chessMoveHistory.push({ from: [r1, c1], to: [r2, c2], piece, captured });
+      chessTurn = chessTurn === "w" ? "b" : "w";
+    }
+    function undoChessMove() {
+      if (chessMoveHistory.length === 0) return;
+      const lastMove = chessMoveHistory.pop();
+      const { from, to, piece, captured } = lastMove;
+      chessBoard[from[0]][from[1]] = piece;
+      chessBoard[to[0]][to[1]] = captured;
+      chessTurn = chessTurn === "w" ? "b" : "w";
+      chessSelected = null;
+      chessLegalMoves = [];
+      renderChessboard();
+      updateChessStatus("");
+    }
+    function resetChessBoard() {
+      initChessBoard();
+      renderChessboard();
+      updateChessStatus("");
+    }
+    function isKingAlive(color) {
+      const king = color === "w" ? "K" : "k";
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (chessBoard[r][c] === king) return true;
+        }
+      }
+      return false;
+    }
+    function getAllLegalMoves(color) {
+      const moves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = chessBoard[r][c];
+          if (!piece) continue;
+          if (color === "w" && isWhite(piece)) {
+            const pieceMoves = generateLegalMoves(r, c);
+            for (const m of pieceMoves) {
+              moves.push({ from: [r, c], to: m });
+            }
+          } else if (color === "b" && isBlack(piece)) {
+            const pieceMoves = generateLegalMoves(r, c);
+            for (const m of pieceMoves) {
+              moves.push({ from: [r, c], to: m });
+            }
+          }
+        }
+      }
+      return moves;
+    }
+    // Simple AI: Minimax with depth 2 and basic evaluation
+    function evaluateBoard() {
+      // Piece values
+      const values = {
+        p: 1,
+        n: 3,
+        b: 3,
+        r: 5,
+        q: 9,
+        k: 1000,
+      };
+      let score = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = chessBoard[r][c];
+          if (!p) continue;
+          const val = values[p.toLowerCase()] || 0;
+          score += isWhite(p) ? val : -val;
+        }
+      }
+      return score;
+    }
+    function cloneBoard(board) {
+      return board.map(row => row.slice());
+    }
+    function minimax(boardState, depth, isMaximizing) {
+      if (depth === 0) {
+        // Evaluate board
+        let score = 0;
+        const values = {
+          p: 1,
+          n: 3,
+          b: 3,
+          r: 5,
+          q: 9,
+          k: 1000,
+        };
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (!p) continue;
+            const val = values[p.toLowerCase()] || 0;
+            score += p === p.toUpperCase() ? val : -val;
+          }
+        }
+        return score;
+      }
+      // Generate all moves for current player
+      const color = isMaximizing ? "w" : "b";
+      const moves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = boardState[r][c];
+          if (!p) continue;
+          if ((color === "w" && p === p.toUpperCase()) || (color === "b" && p === p.toLowerCase())) {
+            const pieceMoves = generateLegalMovesForBoard(boardState, r, c);
+            for (const m of pieceMoves) {
+              moves.push({ from: [r, c], to: m });
+            }
+          }
+        }
+      }
+      if (moves.length === 0) {
+        // No moves, checkmate or stalemate
+        return isMaximizing ? -10000 : 10000;
+      }
+      if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (const move of moves) {
+          const newBoard = makeMoveOnBoard(boardState, move.from, move.to);
+          const evalScore = minimax(newBoard, depth - 1, false);
+          if (evalScore > maxEval) maxEval = evalScore;
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (const move of moves) {
+          const newBoard = makeMoveOnBoard(boardState, move.from, move.to);
+          const evalScore = minimax(newBoard, depth - 1, true);
+          if (evalScore < minEval) minEval = evalScore;
+        }
+        return minEval;
+      }
+    }
+    function generateLegalMovesForBoard(boardState, r, c) {
+      const piece = boardState[r][c];
+      if (!piece) return [];
+      const moves = [];
+      const directions = {
+        N: [
+          [-2, -1],
+          [-2, 1],
+          [-1, -2],
+          [-1, 2],
+          [1, -2],
+          [1, 2],
+          [2, -1],
+          [2, 1],
+        ],
+        B: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+        ],
+        R: [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+        Q: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+        K: [
+          [-1, -1],
+          [-1, 1],
+          [1, -1],
+          [1, 1],
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ],
+      };
+      const whiteTurn = piece === piece.toUpperCase();
+      switch (piece.toUpperCase()) {
+        case "P": {
+          const dir = whiteTurn ? -1 : 1;
+          if (
+            isInsideBoard(r + dir, c) &&
+            boardState[r + dir][c] === ""
+          ) {
+            moves.push([r + dir, c]);
+            if (
+              (whiteTurn && r === 6) ||
+              (!whiteTurn && r === 1)
+            ) {
+              if (boardState[r + 2 * dir][c] === "") {
+                moves.push([r + 2 * dir, c]);
+              }
+            }
+          }
+          for (const dc of [-1, 1]) {
+            const nr = r + dir;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (
+                target &&
+                ((whiteTurn && target === target.toLowerCase()) ||
+                  (!whiteTurn && target === target.toUpperCase()))
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+        case "N": {
+          for (const [dr, dc] of directions.N) {
+            const nr = r + dr;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (
+                !target ||
+                (whiteTurn && target === target.toLowerCase()) ||
+                (!whiteTurn && target === target.toUpperCase())
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+        case "B": {
+          for (const [dr, dc] of directions.B) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && target === target.toLowerCase()) ||
+                  (!whiteTurn && target === target.toUpperCase())
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "R": {
+          for (const [dr, dc] of directions.R) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && target === target.toLowerCase()) ||
+                  (!whiteTurn && target === target.toUpperCase())
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "Q": {
+          for (const [dr, dc] of directions.Q) {
+            let nr = r + dr;
+            let nc = c + dc;
+            while (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (!target) {
+                moves.push([nr, nc]);
+              } else {
+                if (
+                  (whiteTurn && target === target.toLowerCase()) ||
+                  (!whiteTurn && target === target.toUpperCase())
+                ) {
+                  moves.push([nr, nc]);
+                }
+                break;
+              }
+              nr += dr;
+              nc += dc;
+            }
+          }
+          break;
+        }
+        case "K": {
+          for (const [dr, dc] of directions.K) {
+            const nr = r + dr;
+            const nc = c + dc;
+            if (isInsideBoard(nr, nc)) {
+              const target = boardState[nr][nc];
+              if (
+                !target ||
+                (whiteTurn && target === target.toLowerCase()) ||
+                (!whiteTurn && target === target.toUpperCase())
+              ) {
+                moves.push([nr, nc]);
+              }
+            }
+          }
+          break;
+        }
+      }
+      return moves;
+    }
+    function makeMoveOnBoard(boardState, from, to) {
+      const newBoard = cloneBoard(boardState);
+      const piece = newBoard[from[0]][from[1]];
+      newBoard[to[0]][to[1]] = piece;
+      newBoard[from[0]][from[1]] = "";
+      return newBoard;
+    }
+    function aiChessMove() {
+      if (chessTurn !== "b") return;
+      const moves = getAllLegalMoves("b");
+      if (moves.length === 0) {
+        if (!isKingAlive("b")) {
+          updateChessStatus("Kamu menang! AI kalah.");
+        } else if (!isKingAlive("w")) {
+          updateChessStatus("AI menang! Kamu kalah.");
+        } else {
+          updateChessStatus("Seri! Tidak ada langkah legal.");
+        }
+        return;
+      }
+      // Minimax depth 2
+      let bestMove = null;
+      let bestScore = Infinity;
+      for (const move of moves) {
+        const newBoard = makeMoveOnBoard(chessBoard, move.from, move.to);
+        const score = minimax(newBoard, 1, true);
+        if (score < bestScore) {
+          bestScore = score;
+          bestMove = move;
+        }
+      }
+      if (bestMove) {
+        makeChessMove(bestMove.from[0], bestMove.from[1], bestMove.to[0], bestMove.to[1]);
+        renderChessboard();
+        if (!isKingAlive("w")) {
+          updateChessStatus("AI menang! Kamu kalah.");
+        } else {
+          updateChessStatus("");
+        }
+      }
+    }
+    // Render chessboard
+    function renderChessboard() {
+      const chessboardEl = document.getElementById("chessboard");
+      if (!chessboardEl) return;
+      chessboardEl.innerHTML = "";
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const squareColor = (r + c) % 2 === 0 ? "light" : "dark";
+          const square = document.createElement("div");
+          square.className = `square ${squareColor}`;
+          square.dataset.row = r;
+          square.dataset.col = c;
+          const piece = chessBoard[r][c];
+          if (piece) {
+            square.textContent = piecesUnicode[piece];
+            square.classList.add(piece === piece.toUpperCase() ? "text-black" : "text-black");
+          }
+          if (
+            chessSelected &&
+            chessSelected[0] === r &&
+            chessSelected[1] === c
+          ) {
+            square.classList.add("highlight");
+          } else if (
+            chessLegalMoves.some(
+              (m) => m[0] === r && m[1] === c
+            )
+          ) {
+            square.classList.add("highlight");
+          }
+          chessboardEl.appendChild(square);
+        }
+      }
+    }
+    function updateChessStatus(text) {
+      const statusEl = document.getElementById("game-status");
+      if (statusEl) statusEl.textContent = text;
+    }
+    function chessboardClickHandler(e) {
+      if (chessTurn !== "w") return;
+      const sq = e.target.closest(".square");
+      if (!sq) return;
+      const r = parseInt(sq.dataset.row);
+      const c = parseInt(sq.dataset.col);
+      const piece = chessBoard[r][c];
+      if (chessSelected) {
+        if (
+          chessLegalMoves.some(
+            (m) => m[0] === r && m[1] === c
+          )
+        ) {
+          makeChessMove(chessSelected[0], chessSelected[1], r, c);
+          chessSelected = null;
+          chessLegalMoves = [];
+          renderChessboard();
+          updateChessStatus("");
+          setTimeout(() => {
+            aiChessMove();
+          }, 400);
+          return;
+        }
+        if (piece && isWhite(piece)) {
+          chessSelected = [r, c];
+          chessLegalMoves = generateLegalMoves(r, c);
+          renderChessboard();
+          return;
+        }
+        chessSelected = null;
+        chessLegalMoves = [];
+        renderChessboard();
+      } else {
+        if (piece && isWhite(piece)) {
+          chessSelected = [r, c];
+          chessLegalMoves = generateLegalMoves(r, c);
+          renderChessboard();
+        }
+      }
+    }
+
+    // Riddles data
+    const riddles = [
+      {
+        question: "Apa yang selalu datang tapi tidak pernah tiba?",
+        answer: "besok",
+      },
+      {
+        question: "Saya punya kunci tapi tidak bisa membuka pintu. Apa saya?",
+        answer: "piano",
+      },
+      {
+        question: "Apa yang bisa kamu tangkap tapi tidak bisa dilempar?",
+        answer: "flu",
+      },
+      {
+        question: "Apa yang memiliki tangan tapi tidak bisa bertepuk tangan?",
+        answer: "jam",
+      },
+      {
+        question: "Apa yang semakin banyak kamu ambil, semakin besar lubangnya?",
+        answer: "lubang",
+      },
+    ];
+
+    // Introduction text
+    const introductionText = `
+      Halo! Saya FADHLAN, pengembang web dan penggemar teknologi.
+      Saya suka membuat aplikasi AI canggih yang membantu dan menghibur.
+      Kamu bisa bertanya apa saja, bermain teka-teki, atau bermain catur melawan AI saya.
+    `;
+
+    // Weather API helper (Open-Meteo, no key needed)
+    async function fetchWeather(city) {
+      // Simple city to lat/lon mapping for demo
+      const cities = {
+        jakarta: { lat: -6.2088, lon: 106.8456 },
+        bandung: { lat: -6.9175, lon: 107.6191 },
+        surabaya: { lat: -7.2575, lon: 112.7521 },
+        yogyakarta: { lat: -7.7956, lon: 110.3695 },
+        bali: { lat: -8.3405, lon: 115.0920 },
+      };
+      const key = city.toLowerCase();
+      if (!cities[key]) return null;
+      const { lat, lon } = cities[key];
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.current_weather;
+      } catch {
+        return null;
+      }
+    }
+
+    // Add chat message
+    function addChatMessage(text, from = "user") {
+      const msg = document.createElement("div");
+      msg.className =
+        from === "user"
+          ? "text-right"
+          : "text-left text-gray-800 bg-gray-100 rounded p-2 max-w-[80%] inline-block";
+      msg.innerHTML = from === "user" ? `<span>${escapeHtml(text)}</span>` : text;
+      chatMessages.appendChild(msg);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Process user input and respond
+    async function processInput(input) {
+      input = input.trim().toLowerCase();
+      if (!input) return;
+
+      addChatMessage(input, "user");
+
+      // Clear content area
+      contentArea.innerHTML = "";
+
+      // Handle commands
+      if (
+        input.includes("perkenalan") ||
+        input.includes("kenalan") ||
+        input.includes("intro") ||
+        input.includes("siapa kamu")
+      ) {
+        addChatMessage(
+          `<p>${escapeHtml(introductionText).replace(/\n/g, "<br>")}</p>`,
+          "ai"
+        );
+        return;
+      }
+
+      if (input.includes("teka-teki") || input.includes("riddle") || input.includes("tebak")) {
+        // Show random riddle with input box
+        const riddle = riddles[Math.floor(Math.random() * riddles.length)];
+        contentArea.innerHTML = `
+          <h3 class="text-lg font-semibold mb-2">Teka-Teki:</h3>
+          <p class="mb-4 text-gray-700">${escapeHtml(riddle.question)}</p>
+          <input type="text" id="riddle-answer" placeholder="Jawabanmu..." class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 mb-2" autocomplete="off" />
+          <button id="riddle-check" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition font-semibold">Cek Jawaban</button>
+          <p id="riddle-feedback" class="mt-2 font-semibold"></p>
+        `;
+        addChatMessage(
+          `<p>Saya sudah menampilkan teka-teki di panel kanan. Silakan jawab di sana.</p>`,
+          "ai"
+        );
+        document.getElementById("riddle-check").addEventListener("click", () => {
+          const ansInput = document.getElementById("riddle-answer");
+          const feedback = document.getElementById("riddle-feedback");
+          if (!ansInput.value.trim()) {
+            feedback.textContent = "Tolong isi jawabanmu.";
+            feedback.className = "mt-2 font-semibold text-red-600";
+            return;
+          }
+          if (ansInput.value.trim().toLowerCase() === riddle.answer.toLowerCase()) {
+            feedback.textContent = "Jawabanmu benar! 🎉";
+            feedback.className = "mt-2 font-semibold text-green-600";
+          } else {
+            feedback.textContent = "Jawabanmu salah. Coba lagi!";
+            feedback.className = "mt-2 font-semibold text-red-600";
+          }
+        });
+        return;
+      }
+
+      if (input.includes("catur") || input.includes("chess")) {
+        // Show chessboard and controls
+        contentArea.innerHTML = `
+          <div>
+            <div id="chessboard" class="chessboard" aria-label="Papan catur interaktif"></div>
+            <div class="mt-4 flex justify-center gap-4">
+              <button id="undo-move" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition flex items-center gap-2" aria-label="Undo langkah terakhir">
+                <i class="fas fa-undo"></i> Undo
+              </button>
+              <button id="reset-board" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-2" aria-label="Reset papan catur">
+                <i class="fas fa-redo"></i> Reset
+              </button>
+            </div>
+            <p id="game-status" class="mt-4 text-center font-semibold text-gray-800" role="status" aria-live="polite"></p>
+          </div>
+          <div class="mt-4 max-w-md text-gray-700">
+            <h3 class="text-lg font-semibold mb-2">Petunjuk Bermain</h3>
+            <ul class="list-disc list-inside space-y-1">
+              <li>Kamu bermain sebagai <strong>Putih</strong>, AI sebagai <strong>Hitam</strong>.</li>
+              <li>Klik bidak putih yang ingin kamu gerakkan, lalu klik kotak tujuan.</li>
+              <li>AI akan membalas dengan langkahnya secara otomatis.</li>
+              <li>Gunakan tombol Undo untuk membatalkan langkah terakhir.</li>
+              <li>Gunakan tombol Reset untuk memulai permainan baru.</li>
+            </ul>
+            <p class="mt-4 italic text-sm text-gray-500">AI menggunakan algoritma minimax sederhana dengan kedalaman 2.</p>
+          </div>
+        `;
+        initChessBoard();
+        renderChessboard();
+        updateChessStatus("");
+        document.getElementById("chessboard").addEventListener("click", chessboardClickHandler);
+        document.getElementById("undo-move").addEventListener("click", () => {
+          undoChessMove();
+          undoChessMove();
+        });
+        document.getElementById("reset-board").addEventListener("click", () => {
+          resetChessBoard();
+        });
+        addChatMessage(
+          `<p>Papan catur sudah muncul di panel kanan. Selamat bermain!</p>`,
+          "ai"
+        );
+        return;
+      }
+
+      if (input.startsWith("cuaca di ") || input.startsWith("weather in ")) {
+        // Extract city
+        const city = input.replace(/^(cuaca di |weather in )/, "").trim();
+        addChatMessage(`<p>Mencari cuaca di <strong>${escapeHtml(city)}</strong>...</p>`, "ai");
+        const weather = await fetchWeather(city);
+        if (!weather) {
+          addChatMessage(`<p>Maaf, saya tidak dapat menemukan data cuaca untuk "${escapeHtml(city)}".</p>`, "ai");
+          return;
+        }
+        const tempC = weather.temperature;
+        const wind = weather.windspeed;
+        const weatherText = `
+          <p>Cuaca saat ini di <strong>${escapeHtml(city)}</strong>:</p>
+          <ul class="list-disc list-inside text-gray-700">
+            <li>Suhu: ${tempC}°C</li>
+            <li>Kecepatan angin: ${wind} km/jam</li>
+            <li>Status: ${weather.weathercode !== undefined ? weatherCodeToText(weather.weathercode) : "Data tidak tersedia"}</li>
+          </ul>
+        `;
+        addChatMessage(weatherText, "ai");
+        return;
+      }
+
+      // Default fallback: simple echo with AI flair
+      addChatMessage(
+        `<p>Maaf, saya belum mengerti perintah tersebut. Kamu bisa mencoba: <strong>perkenalan</strong>, <strong>teka-teki</strong>, <strong>catur</strong>, atau <strong>cuaca di [kota]</strong>.</p>`,
+        "ai"
+      );
+    }
+
+    // Weather code to text (basic)
+    function weatherCodeToText(code) {
+      const map = {
+        0: "Cerah",
+        1: "Cerah berawan",
+        2: "Berawan",
+        3: "Mendung",
+        45: "Kabut",
+        48: "Kabut beku",
+        51: "Hujan gerimis ringan",
+        53: "Hujan gerimis sedang",
+        55: "Hujan gerimis lebat",
+        56: "Hujan es ringan",
+        57: "Hujan es lebat",
+        61: "Hujan ringan",
+        63: "Hujan sedang",
+        65: "Hujan lebat",
+        66: "Hujan es ringan",
+        67: "Hujan es lebat",
+        71: "Salju ringan",
+        73: "Salju sedang",
+        75: "Salju lebat",
+        77: "Butiran salju",
+        80: "Hujan lokal ringan",
+        81: "Hujan lokal sedang",
+        82: "Hujan lokal lebat",
+        85: "Salju lokal ringan",
+        86: "Salju lokal lebat",
+        95: "Badai petir",
+        96: "Badai petir ringan dengan hujan es",
+        99: "Badai petir lebat dengan hujan es",
+      };
+      return map[code] || "Tidak diketahui";
+    }
+
+    // Initialize
+    chatForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = chatInput.value;
+      chatInput.value = "";
+      chatInput.disabled = true;
+      submitBtn.disabled = true;
+      await processInput(input);
+      chatInput.disabled = false;
+      submitBtn.disabled = false;
+      chatInput.focus();
+    });
+
+    // Submit button reference for disabling/enabling
+    const submitBtn = chatForm.querySelector("button[type=submit]");
+
+    // Focus input on load
+    chatInput.focus();
+  </script>
+</body>
+</html>
