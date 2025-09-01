@@ -113,7 +113,7 @@
   </main>
 
   <footer class="bg-gray-100 text-center text-gray-600 p-3 text-sm">
-    © 2024 FADHLAN's Advanced AI Demo
+    © 2025 FADHLAN AI Demo
   </footer>
 
   <script>
@@ -707,11 +707,11 @@
       const moves = getAllLegalMoves("b");
       if (moves.length === 0) {
         if (!isKingAlive("b")) {
-          updateChessStatus("Kamu menang! AI kalah.");
+          updateChessStatus("wih, boleh juga.");
         } else if (!isKingAlive("w")) {
-          updateChessStatus("AI menang! Kamu kalah.");
+          updateChessStatus("Yahh kalah.");
         } else {
-          updateChessStatus("Seri! Tidak ada langkah legal.");
+          updateChessStatus("Draww broo.");
         }
         return;
       }
